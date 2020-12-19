@@ -1,6 +1,7 @@
 //
 // Created by clemence on 2020-12-19. AND JACK
 //
+#define GL_GLEXT_PROTOTYPES
 #include <GLFW/glfw3.h>
 #include <fluidsim.h>
 
@@ -29,10 +30,18 @@ int main(int argc, char **argv) {
     GLFWwindow* window = glfwCreateWindow(800, 800, "OpenGL", nullptr, nullptr);
     glfwMakeContextCurrent(window);
 
+    float vertices[] = {
+            0.0f, 0.5f,
+            0.5f, -0.5f,
+            -0.5f, -0.5f
+    };
     // initialize main sim variables here
 
     while(!glfwWindowShouldClose(window))
     {
+        glClear(GL_COLOR_BUFFER_BIT);
+        glColor3f(1.0, 1.0, 1.0);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
