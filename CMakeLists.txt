@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.10)
+project(csc417-final-project)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+cmake_policy(SET CMP0072 NEW)
+find_package(OpenGL REQUIRED)
+find_package(glfw3 REQUIRED)
+add_executable(${PROJECT_NAME} main.cpp)
+target_link_libraries(${PROJECT_NAME} glfw)
