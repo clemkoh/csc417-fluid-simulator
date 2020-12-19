@@ -1,10 +1,23 @@
 //
-// Created by clemence on 2020-12-19.
+// Created by clemence on 2020-12-19. AND JACK
 //
 #define GL_GLEXT_PROTOTYPES
 #include <GLFW/glfw3.h>
+#include <fluidsim.h>
+
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
 
 int main(int argc, char **argv) {
+
+    /*  Generalized coordinates is a 2n vector of particle positions:
+        [x1, y1, x2, y2, ...] , where n is the number of fluid particles defined
+        in simulation. */  
+    Eigen::VectorXf q = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
+
+    /*  Generalized velocity of fluid particles */
+    Eigen::VectorXf qdot = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
+
     glfwInit();
 
     // Create window
@@ -22,6 +35,7 @@ int main(int argc, char **argv) {
             0.5f, -0.5f,
             -0.5f, -0.5f
     };
+    // initialize main sim variables here
 
     while(!glfwWindowShouldClose(window))
     {
