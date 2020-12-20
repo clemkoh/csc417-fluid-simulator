@@ -2,6 +2,7 @@
 // Created by clemence on 2020-12-19. AND JACK
 //
 #define GL_GLEXT_PROTOTYPES
+#include <igl/opengl/glfw/Viewer.h>
 #include <GLFW/glfw3.h>
 #include <fluidsim.h>
 
@@ -18,32 +19,20 @@ int main(int argc, char **argv) {
     /*  Generalized velocity of fluid particles */
     Eigen::VectorXf qdot = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
 
-    glfwInit();
+    igl::opengl::glfw::Viewer viewer;
+    viewer.core().is_animating = true;
+    viewer.core().set_rotation_type(igl::opengl::ViewerCore::ROTATION_TYPE_NO_ROTATION);
 
-    // Create window
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-    glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
-    GLFWwindow* window = glfwCreateWindow(800, 800, "OpenGL", nullptr, nullptr);
-    glfwMakeContextCurrent(window);
-
-    float vertices[] = {
-            0.0f, 0.5f,
-            0.5f, -0.5f,
-            -0.5f, -0.5f
-    };
-    // initialize main sim variables here
-
-    while(!glfwWindowShouldClose(window))
+    Eigen::MatrixXd points(NUM_PARTICLES,3);
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer & )->bool
     {
-        glClear(GL_COLOR_BUFFER_BIT);
-        glColor3f(1.0, 1.0, 1.0);
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-    glfwTerminate();
+        for (int i = 0; i < points.rows(); i++) {
+            points(i, 0) = q(2 * i);
+            points(i, 1) = q(2 * i + 1);
+        }
+        points = points.eval();
+        viewer.data().set_points(points, Eigen::RowVector3d(1,1,1));
+        return false;
+    };
+    viewer.launch();
 }
