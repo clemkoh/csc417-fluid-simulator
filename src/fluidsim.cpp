@@ -29,8 +29,6 @@ double calculate_dt(Eigen::Ref<Eigen::VectorXf> qdot) {
 
 void run_one_iteration(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot) {
     double dt = calculate_dt(qdot);
-    
-    std::cout << dt << "\n";
 
     advect_step(q, qdot, dt);
     external_forces_step(q, qdot, dt);
@@ -71,7 +69,7 @@ void external_forces_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::Vecto
     Eigen::VectorXf g = Eigen::VectorXf::Zero(qdot.size());
 
     for (int i = 0; i < qdot.size()/2; i++) {
-        g(2*i +1) = -9.81;
+        g(2*i +1) = -9.81 * PARTICLE_MASS;
     }
 
     qdot = qdot + dt*g;
@@ -95,11 +93,9 @@ void pressure_project_step(
     for (int i = 0; i < NUM_PARTICLES; i++) {
         double qx = q(2*i);
         double qy = q(2*i + 1);
-        double qdotx = qdot(2*i);
-        double qdoty = qdot(2*i +1);
         cells[((int)(2*qy))/GRID_DY][((int)(2*qx))/GRID_DX].push_back(i);
     }
-    std::cout << "Hello0\n";
+
     /* no idea how the memory layout is for this so we might not be accessing it in the best way */
     for (int yi = 0; yi < 2*num_cells_y; yi++) {
         for (int xi = 0; xi < 2*num_cells_x; xi++) {
@@ -138,8 +134,8 @@ void pressure_project_step(
                 } else if (xi == 2*num_cells_x -1) {
                     Eigen::Vector2d w;
                     linear_weights(w, qy, (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY);
-                    mac_x(yi/2, (xi-1)/2) += w(0)*qdoty;
-                    mac_x(yi/2 +1, (xi-1)/2) += w(1)*qdoty;
+                    mac_y(yi/2, (xi-1)/2) += w(0)*qdoty;
+                    mac_y(yi/2 +1, (xi-1)/2) += w(1)*qdoty;
                 } else {
                     Eigen::Vector4d w;
                     bilinear_weights(w, qx, qy, ((xi-1)/2)*GRID_DX, ((xi-1)/2 +1)*GRID_DX, (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY);
@@ -153,7 +149,7 @@ void pressure_project_step(
     }
  
     Eigen::SparseMatrix<double> A(num_cells_x*num_cells_y, num_cells_x*num_cells_y);
-    // change to row major, atually this might be symmetric???
+    // change to row major, actually this might be symmetric???
     Eigen::VectorXd b(num_cells_x*num_cells_y);
 
     for (int i=0; i < num_cells_x*num_cells_y; i++) {
@@ -217,8 +213,6 @@ void pressure_project_step(
         }
     }
 
-    std::cout << "TEST" << p << "\n";
-
     /* convert back to particle form */
     for (int yi = 0; yi < 2*num_cells_y; yi++) {
         for (int xi = 0; xi < 2*num_cells_x; xi++) {
@@ -226,27 +220,25 @@ void pressure_project_step(
 
                 double x_v_interpolation, y_v_interpolation;
                 
-                int index = cells[xi][yi][p];                
-                double qdotx = qdot(2*index);
-                double qdoty = qdot(2*index+1); 
+                int index = cells[yi][xi][p];
                 double qx = q(2*index);
                 double qy = q(2*index+1);
 
                 // PIC transfer from grid to particle
+
                 if (yi == 0 || yi == (2*num_cells_y)-1) { // only do linear interpolation? is this right?
                     x_v_interpolation = linear_interpolate(
                         qx, 
-                        (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX, 
-                        mac_x(yi/2,xi/2), mac_x(yi/2, xi/2 +1)
+                        (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX,
+                        mac_x(max(0,(yi-1)/2),xi/2), mac_x(max(0,(yi-1)/2), xi/2 +1)
                     );
-
                 } else {
                     x_v_interpolation = bilinear_interpolate(
                         qx, qy,
                         (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX,
-                        (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY,
-                        mac_x(yi/2, xi/2), mac_x(yi/2, xi/2 +1),
-                        mac_x(yi/2 +1, xi/2), mac_x(yi/2+1, xi/2 +1)
+                        ((yi-1)/2)*GRID_DY, ((yi-1)/2 +1)*GRID_DY,
+                        mac_x((yi-1)/2, xi/2), mac_x((yi-1)/2, xi/2 +1),
+                        mac_x((yi-1)/2 +1, xi/2), mac_x((yi-1)/2 +1, xi/2 +1)
                     );
                 }
 
@@ -254,15 +246,15 @@ void pressure_project_step(
                     y_v_interpolation = linear_interpolate(
                         qy,
                         (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY,
-                        mac_y(yi/2,xi/2), mac_y(yi/2 + 1, xi/2)
+                        mac_y(yi/2,max(0,(xi-1)/2)), mac_y(yi/2 + 1, max(0,(xi-1)/2))
                     );
                 } else {
                     y_v_interpolation = bilinear_interpolate(
                         qx, qy,
-                        (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX,
+                        ((xi-1)/2)*GRID_DX, ((xi-1)/2 +1)*GRID_DX,
                         (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY,
-                        mac_y(yi/2, xi/2), mac_y(yi/2, xi/2+1),
-                        mac_y(yi/2 +1, xi/2), mac_y(yi/2+1, xi/2 +1)
+                        mac_y(yi/2, (xi-1)/2), mac_y(yi/2, (xi-1)/2 +1),
+                        mac_y(yi/2 +1, (xi-1)/2), mac_y(yi/2+1, (xi-1)/2 +1)
                     );
                 }
 

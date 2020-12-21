@@ -2,9 +2,9 @@
 #include <Eigen/Sparse>
 
 // MAIN fluid variables
-#define DENSITY 0.0
+#define DENSITY 2.0
 #define VISCOSITY 0.0
-#define NUM_PARTICLES 8
+#define NUM_PARTICLES 16
 #define DT 1
 
 // simulation area size
@@ -13,6 +13,8 @@
 
 #define GRID_DX 10
 #define GRID_DY 10
+
+#define PARTICLE_MASS (1)
 
 
 

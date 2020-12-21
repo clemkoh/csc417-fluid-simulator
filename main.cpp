@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <iostream>
 
+#define RESCALE (1.0/40.0)
+
 int main(int argc, char **argv) {
 
     /*  Generalized coordinates is a 2n vector of particle positions:
@@ -24,8 +26,8 @@ int main(int argc, char **argv) {
     init_fluid_sim(q, qdot);
 
     run_one_iteration(q, qdot);
-    std::cout << q << "\n";
-    std::cout << qdot << "\n";
+    //std::cout << q << "\n";
+    //std::cout << qdot << "\n";
 
     igl::opengl::glfw::Viewer viewer;
     viewer.core().is_animating = true;
@@ -34,9 +36,10 @@ int main(int argc, char **argv) {
     Eigen::MatrixXd points(NUM_PARTICLES,3);
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer & )->bool
     {
+        run_one_iteration(q, qdot);
         for (int i = 0; i < points.rows(); i++) {
-            points(i, 0) = q(2 * i);
-            points(i, 1) = q(2 * i + 1);
+            points(i, 0) = q(2 * i) * RESCALE;
+            points(i, 1) = q(2 * i + 1) * RESCALE;
         }
         points = points.eval();
         viewer.data().set_points(points, Eigen::RowVector3d(1,1,1));
