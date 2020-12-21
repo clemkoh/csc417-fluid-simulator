@@ -44,7 +44,6 @@ void init_fluid_sim(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> q
     int xrange_start = GRID_DX;
     int xrange_len   = LENGTH - 2*GRID_DX;
 
-
     int yrange_start = GRID_DY;
     int yrange_len   = HEIGHT - 2*GRID_DY;
 
@@ -62,7 +61,31 @@ void init_fluid_sim(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> q
 
 
 void advect_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt) {
-    q = q + dt*qdot; // not sure how stable this is
+    //std::cout << "dt: " << dt << "\n";
+    
+    Eigen::VectorXf temp = q + dt*qdot;
+
+    for (int i = 0; i< qdot.size(); i+=2) {
+        if (temp(i) <= GRID_DX) {
+            q(i) = GRID_DX;
+            qdot(i) = 0;
+        } else if (temp(i) >= LENGTH - GRID_DX)  {
+            q(i) = (LENGTH-GRID_DX);
+            qdot(i) = 0;
+        } else {
+            q(i) = temp(i);
+        }
+
+        if (temp(i+1) <= GRID_DY) {
+            q(i+1) = GRID_DY;
+            qdot(i+1) = 0;
+        } else if (temp(i+1) >= HEIGHT - GRID_DY) {
+            q(i+1) = (HEIGHT-GRID_DY);
+            qdot(i+1) = 0;
+        } else {
+            q(i+1) = temp(i+1);
+        }
+    }
 }
 
 void external_forces_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt) {

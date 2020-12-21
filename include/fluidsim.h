@@ -2,20 +2,17 @@
 #include <Eigen/Sparse>
 
 // MAIN fluid variables
-#define DENSITY 2.0
-#define VISCOSITY 0.0
-#define NUM_PARTICLES 16
-#define DT 1
+#define DENSITY 25.0
+#define NUM_PARTICLES 50
 
 // simulation area size
-#define LENGTH 100
-#define HEIGHT 100
+#define LENGTH 400
+#define HEIGHT 400
 
 #define GRID_DX 10
 #define GRID_DY 10
 
-#define PARTICLE_MASS (1)
-
+#define PARTICLE_MASS 5.0
 
 
 void run_one_iteration(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot);
@@ -24,8 +21,6 @@ void run_one_iteration(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf
 void init_fluid_sim(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot);
 
 void advect_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt);
-
-//void diffusion_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt);
 
 /* I think we can hardcode the external forces (probably just gravity) inside this function */
 void external_forces_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt);
