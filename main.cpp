@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
     /*  Generalized velocity of fluid particles */
     Eigen::VectorXf qdot = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
 
+    init_fluid_sim(q, qdot);
+
     igl::opengl::glfw::Viewer viewer;
     viewer.core().is_animating = true;
     viewer.core().set_rotation_type(igl::opengl::ViewerCore::ROTATION_TYPE_NO_ROTATION);
