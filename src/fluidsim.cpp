@@ -4,16 +4,78 @@
 #include <cmath>
 #include <algorithm>
 #include <utility>
+#include <stdlib.h> 
+#include <iostream> 
+#include <time.h>
 #include <fluidsim.h>
 
 
-/* TODO: set this to non zero */
+double max(double a, double b) {
+    return a > b ? a : b;
+}
+
+double min(double a, double b) {
+    return a < b ? a : b;
+}
+
+double calculate_dt(Eigen::Ref<Eigen::VectorXf> qdot) {
+    double max_v = 1.0;
+
+    for (int i = 0; i < qdot.size()/2; i++) {
+        max_v = max(std::abs(qdot(2*i)) + std::abs(qdot(2*i+1)), max_v);
+    }
+    return min(0.1, GRID_DX / max_v);
+}
+
+void run_one_iteration(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot) {
+    double dt = calculate_dt(qdot);
+    
+    std::cout << dt << "\n";
+
+    advect_step(q, qdot, dt);
+    external_forces_step(q, qdot, dt);
+    pressure_project_step(qdot, q, dt, DENSITY);
+}
+
 void init_fluid_sim(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot) {
-    q = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
-    qdot = Eigen::VectorXf::Zero(2*NUM_PARTICLES);    
+/*  q = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
+    qdot = Eigen::VectorXf::Zero(2*NUM_PARTICLES); */
+
+    srand (time(NULL));
+
+    int xrange_start = GRID_DX;
+    int xrange_len   = LENGTH - 2*GRID_DX;
+
+
+    int yrange_start = GRID_DY;
+    int yrange_len   = HEIGHT - 2*GRID_DY;
+
+    /* only initializes within RAND_MAX */
+    for (int i = 0; i < NUM_PARTICLES; i++) {
+        int xpos = rand() % xrange_len + xrange_start;
+        int ypos = rand() % yrange_len + yrange_start;
+
+        q(2*i) = xpos;
+        q(2*i + 1) = ypos;
+
+        /* qdot (velocity) is intially zero */
+    }
 }
 
 
+void advect_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt) {
+    q = q + dt*qdot; // not sure how stable this is
+}
+
+void external_forces_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt) {
+    Eigen::VectorXf g = Eigen::VectorXf::Zero(qdot.size());
+
+    for (int i = 0; i < qdot.size()/2; i++) {
+        g(2*i +1) = -9.81;
+    }
+
+    qdot = qdot + dt*g;
+}
 
 void pressure_project_step(
     Eigen::Ref<Eigen::VectorXf> qdot, 
@@ -37,7 +99,7 @@ void pressure_project_step(
         double qdoty = qdot(2*i +1);
         cells[((int)(2*qy))/GRID_DY][((int)(2*qx))/GRID_DX].push_back(i);
     }
-
+    std::cout << "Hello0\n";
     /* no idea how the memory layout is for this so we might not be accessing it in the best way */
     for (int yi = 0; yi < 2*num_cells_y; yi++) {
         for (int xi = 0; xi < 2*num_cells_x; xi++) {
@@ -90,9 +152,9 @@ void pressure_project_step(
         }
     }
  
-    Eigen::SparseMatrix<double, Eigen::RowMajor> A(num_cells_x*num_cells_y, num_cells_x*num_cells_y);
+    Eigen::SparseMatrix<double> A(num_cells_x*num_cells_y, num_cells_x*num_cells_y);
+    // change to row major, atually this might be symmetric???
     Eigen::VectorXd b(num_cells_x*num_cells_y);
-
 
     for (int i=0; i < num_cells_x*num_cells_y; i++) {
 
@@ -101,12 +163,12 @@ void pressure_project_step(
             int xval = i%num_cells_x;
             // assumes that GRID_DX === GRID_DY
             b(i) = (mac_x(yval, xval+1) - mac_x(yval, xval) + mac_y(yval+1,xval) - mac_y(yval, xval))/GRID_DX;
-
+            
             if (xval != 0) { // insert to the left
                 A.insert(i, i-1) = -1;
                 num_neighbours++;
             }
-
+            
             if (xval != num_cells_x-1) { // insert to the right
                 A.insert(i, i+1) = -1;
                 num_neighbours++;
@@ -124,16 +186,18 @@ void pressure_project_step(
 
             A.insert(i,i) = num_neighbours;
     }
+    
     Eigen::VectorXd p = Eigen::VectorXd::Zero(num_cells_x*num_cells_y);
     Eigen::ConjugateGradient< Eigen::SparseMatrix<double>,
-                              Eigen::Lower|Eigen::Upper                              
-                              > cg;
-    
+                              Eigen::Lower|Eigen::Upper > cg;    
     cg.setMaxIterations(64);
-    cg.compute((dt/(density * GRID_DX)) * A);
+    
+    A = (dt/(density * GRID_DX)) * A;
+    cg.compute(A);
     
     /* TODO: should we negate the divergence vectors? */
     p = cg.solve(b);
+    
 
     /* update grid velocities with computed pressures */
     for (int pi = 0; pi < num_cells_x*num_cells_y; pi++) {
@@ -152,6 +216,8 @@ void pressure_project_step(
             mac_x(py, px) -= du;
         }
     }
+
+    std::cout << "TEST" << p << "\n";
 
     /* convert back to particle form */
     for (int yi = 0; yi < 2*num_cells_y; yi++) {
@@ -225,6 +291,7 @@ void bilinear_weights(
     weights(2) = wx2 * wy1;
     weights(3) = wx2 * wy2;
 }
+
 double bilinear_interpolate(
     double x, double y,
     double x1, double x2, double y1, double y2,
