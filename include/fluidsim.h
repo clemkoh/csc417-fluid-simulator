@@ -28,10 +28,29 @@ void diffusion_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> q
 /* I think we can hardcode the external forces (probably just gravity) inside this function */
 void external_forces_step(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot, double dt);
 
-void pressure_project_step(Eigen::Ref<Eigen::VectorXf> density, 
-                           Eigen::Ref<const Eigen::VectorXf> q, 
-                           Eigen::Ref<const Eigen::VectorXf> qdot, 
-                           Eigen::Ref<Eigen::MatrixXf> mac_x, /* staggered grid part of x coords */
-                           Eigen::Ref<Eigen::MatrixXf> mac_y, /* staggered grid part of y coords */
-                           Eigen::Ref<Eigen::MatrixXf> mac_p, /* staggered grid part of pressure */                           
-                           const double dt);
+void pressure_project_step(
+    Eigen::Ref<Eigen::VectorXf> qdot, 
+    Eigen::Ref<const Eigen::VectorXf> q, 
+    const double dt,
+    const double density);
+
+void bilinear_weights(
+    Eigen::Ref<Eigen::Vector4d> weights,
+    double x, double y,
+    double x1, double x2, double y1, double y2);
+
+double bilinear_interpolate(
+    double x, double y,
+    double x1, double x2, double y1, double y2,
+    double q11, double q12, double q21, double q22);
+
+void linear_weights(
+    Eigen::Ref<Eigen::Vector2d> weights,
+    double x,
+    double x1, double x2);
+
+double linear_interpolate(
+    double x,
+    double x1, double x2,
+    double q1, double q2);
+

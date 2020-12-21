@@ -7,52 +7,6 @@
 #include <fluidsim.h>
 
 
-void bilinear_weights(
-    Eigen::Ref<Eigen::Vector4d> weights,
-    double x, double y,
-    double x1, double x2, double y1, double y2) 
-{
-    double wx1 = (x2 - x) / (x2 - x1);
-    double wx2 = (x - x1) / (x2 - x1);
-    double wy1 = (y2 - y) / (y2 - y1);
-    double wy2 = (y - y1) / (y2 - y1);
-
-    weights(0) = wx1 * wy1;
-    weights(1) = wx1 * wy2;
-    weights(2) = wx2 * wy1;
-    weights(3) = wx2 * wy2;
-}
-double bilinear_interpolate(
-    double x, double y,
-    double x1, double x2, double y1, double y2,
-    double q11, double q12, double q21, double q22) 
-{    
-    Eigen::Vector4d w;
-    bilinear_weights(w, x, y, x1, x2, y1, y2);
-
-    return w(0)*q11 + w(1)*q12 + w(2)*q21 + w(3)*q22; 
-}
-
-void linear_weights(
-    Eigen::Ref<Eigen::Vector2d> weights,
-    double x,
-    double x1, double x2) 
-{    
-    weights(0) = (x2 - x) / (x2 - x1);
-    weights(1) = (x - x1) / (x2 - x1);
-}
-
-double linear_interpolate(
-    double x,
-    double x1, double x2,
-    double q1, double q2) 
-{
-    Eigen::Vector2d w;
-    linear_weights(w, x, x1, x2);
-    return q1*w(0) + q2*w(1);
-}
-
-
 /* TODO: set this to non zero */
 void init_fluid_sim(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> qdot) {
     q = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
@@ -62,26 +16,26 @@ void init_fluid_sim(Eigen::Ref<Eigen::VectorXf> q, Eigen::Ref<Eigen::VectorXf> q
 
 
 void pressure_project_step(
-    Eigen::Ref<Eigen::VectorXf> density, 
-    Eigen::Ref<Eigen::VectorXf> q, 
     Eigen::Ref<Eigen::VectorXf> qdot, 
-    Eigen::Ref<Eigen::MatrixXf> mac_x, /* staggered grid part of x coords: (n) by (n+1) */
-    Eigen::Ref<Eigen::MatrixXf> mac_y, /* staggered grid part of y coords: (n+1) by (n) */
-    Eigen::Ref<Eigen::MatrixXf> mac_p_x, /* staggered grid part of pressure: n by n */ 
-    const double dt) {
-    
-    
+    Eigen::Ref<const Eigen::VectorXf> q, 
+    const double dt,
+    const double density) 
+{    
     int num_cells_x = LENGTH/GRID_DX;
     int num_cells_y = HEIGHT/GRID_DY;
-    /* collect particles to MAC grid, maybe pass this as an argument */
-    std::vector< std::tuple <double, double, int> > cells[2*num_cells_y][2*num_cells_x]; /* scratch space for collecting particles */
+
+    /* collect particles to MAC grid*/
+    std::vector<int> cells[2*num_cells_y][2*num_cells_x]; 
+    
+    Eigen::MatrixXd mac_x = Eigen::MatrixXd::Zero(num_cells_y, num_cells_x+1);
+    Eigen::MatrixXd mac_y = Eigen::MatrixXd::Zero(num_cells_y+1, num_cells_x);    
 
     for (int i = 0; i < NUM_PARTICLES; i++) {
         double qx = q(2*i);
         double qy = q(2*i + 1);
         double qdotx = qdot(2*i);
         double qdoty = qdot(2*i +1);
-        cells[((int)(2*qy))/GRID_DY][((int)(2*qx))/GRID_DX].push_back(std::make_tuple(qdotx, qdoty, i));
+        cells[((int)(2*qy))/GRID_DY][((int)(2*qx))/GRID_DX].push_back(i);
     }
 
     /* no idea how the memory layout is for this so we might not be accessing it in the best way */
@@ -89,49 +43,48 @@ void pressure_project_step(
         for (int xi = 0; xi < 2*num_cells_x; xi++) {
             for (int p=0; p < cells[yi][xi].size(); p++) {
 
-                std::tuple<double, double, int> point = cells[yi][xi][p];
-                double xval = std::get<0>(point);
-                double yval = std::get<1>(point);
-                int index = std::get<1>(point);
+                int index = cells[yi][xi][p];
+                double qdotx = qdot(2*index);
+                double qdoty = qdot(2*index+1);
                 double qx = q(2*index);
                 double qy = q(2*index+1);
 
                 if (yi == 0) {
                     Eigen::Vector2d w;
                     linear_weights(w, qx, (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX);
-                    mac_x(0, xi/2) += w(0)*xval;
-                    mac_x(0, xi/2 +1) += w(1)*xval;
+                    mac_x(0, xi/2) += w(0)*qdotx;
+                    mac_x(0, xi/2 +1) += w(1)*qdotx;
                 } else if (yi == 2*num_cells_y -1) {
                     Eigen::Vector2d w;
                     linear_weights(w, qx, (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX);
-                    mac_x((yi-1)/2, xi/2) += w(0)*xval;
-                    mac_x((yi-1)/2, xi/2 +1) += w(1)*xval;
+                    mac_x((yi-1)/2, xi/2) += w(0)*qdotx;
+                    mac_x((yi-1)/2, xi/2 +1) += w(1)*qdotx;
                 } else { /* i think this is right? */
                     Eigen::Vector4d w;
                     bilinear_weights(w, qx, qy, (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX, ((yi-1)/2)*GRID_DY, ((yi-1)/2 +1)*GRID_DY);
-                    mac_x((yi-1)/2, xi/2) += w(0)*xval;
-                    mac_x((yi-1)/2 + 1, xi/2) += w(1)*xval;
-                    mac_x((yi-1)/2, xi/2 + 1) += w(2)*xval;                    
-                    mac_x((yi-1)/2 + 1, xi/2 +1) += w(3)*xval;
+                    mac_x((yi-1)/2, xi/2) += w(0)*qdotx;
+                    mac_x((yi-1)/2 + 1, xi/2) += w(1)*qdotx;
+                    mac_x((yi-1)/2, xi/2 + 1) += w(2)*qdotx;                    
+                    mac_x((yi-1)/2 + 1, xi/2 +1) += w(3)*qdotx;
                 }
 
                 if (xi == 0) {
                     Eigen::Vector2d w;
                     linear_weights(w, qy, (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY);
-                    mac_y(yi/2, 0) += w(0)*yval;
-                    mac_y(yi/2 +1, 0) += w(1)*yval;
+                    mac_y(yi/2, 0) += w(0)*qdoty;
+                    mac_y(yi/2 +1, 0) += w(1)*qdoty;
                 } else if (xi == 2*num_cells_x -1) {
                     Eigen::Vector2d w;
                     linear_weights(w, qy, (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY);
-                    mac_x(yi/2, (xi-1)/2) += w(0)*yval;
-                    mac_x(yi/2 +1, (xi-1)/2) += w(1)*yval;
+                    mac_x(yi/2, (xi-1)/2) += w(0)*qdoty;
+                    mac_x(yi/2 +1, (xi-1)/2) += w(1)*qdoty;
                 } else {
                     Eigen::Vector4d w;
                     bilinear_weights(w, qx, qy, ((xi-1)/2)*GRID_DX, ((xi-1)/2 +1)*GRID_DX, (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY);
-                    mac_y(yi/2, (xi-1)/2) += w(0)*yval;
-                    mac_y(yi/2 + 1, (xi-1)/2) += w(1)*yval;
-                    mac_y(yi/2, (xi-1)/2 + 1) += w(2)*yval;
-                    mac_y(yi/2 + 1, (xi-1)/2 +1) += w(3)*yval;
+                    mac_y(yi/2, (xi-1)/2) += w(0)*qdoty;
+                    mac_y(yi/2 + 1, (xi-1)/2) += w(1)*qdoty;
+                    mac_y(yi/2, (xi-1)/2 + 1) += w(2)*qdoty;
+                    mac_y(yi/2 + 1, (xi-1)/2 +1) += w(3)*qdoty;
                 }
             }
         }
@@ -177,7 +130,7 @@ void pressure_project_step(
                               > cg;
     
     cg.setMaxIterations(64);
-    cg.compute((DT/(DENSITY * GRID_DX)) * A);
+    cg.compute((dt/(density * GRID_DX)) * A);
     
     /* TODO: should we negate the divergence vectors? */
     p = cg.solve(b);
@@ -189,13 +142,13 @@ void pressure_project_step(
 
         if (py != 0) {
             double dv = p(py*num_cells_x+px) - p((py-1)*num_cells_x+px);
-            dv *= DT/(DENSITY*GRID_DX);
+            dv *= dt/(density*GRID_DX);
             mac_y(py,px) -= dv;
         }
 
         if (px != 0) {
             double du = p(py*num_cells_x+px) - p(py*num_cells_x +px -1);
-            du *= DT/(DENSITY*GRID_DX);
+            du *= dt/(density*GRID_DX);
             mac_x(py, px) -= du;
         }
     }
@@ -205,28 +158,25 @@ void pressure_project_step(
         for (int xi = 0; xi < 2*num_cells_x; xi++) {
             for (int p=0; p < cells[yi][xi].size(); p++) {
 
-                std::tuple<double, double, int> point = cells[xi][yi][p];
-
                 double x_v_interpolation, y_v_interpolation;
-                /* get x,y velocities */ 
-                double x_velocity = std::get<0>(point);
-                double y_velocity = std::get<1>(point);
-                int index = std::get<2>(point);
-
-                double x_pos = q(2*index);
-                double y_pos = q(2*index+1);
+                
+                int index = cells[xi][yi][p];                
+                double qdotx = qdot(2*index);
+                double qdoty = qdot(2*index+1); 
+                double qx = q(2*index);
+                double qy = q(2*index+1);
 
                 // PIC transfer from grid to particle
                 if (yi == 0 || yi == (2*num_cells_y)-1) { // only do linear interpolation? is this right?
                     x_v_interpolation = linear_interpolate(
-                        x_pos, 
+                        qx, 
                         (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX, 
                         mac_x(yi/2,xi/2), mac_x(yi/2, xi/2 +1)
                     );
 
                 } else {
                     x_v_interpolation = bilinear_interpolate(
-                        x_pos, y_pos,
+                        qx, qy,
                         (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX,
                         (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY,
                         mac_x(yi/2, xi/2), mac_x(yi/2, xi/2 +1),
@@ -236,13 +186,13 @@ void pressure_project_step(
 
                 if (xi == 0 || xi == (2*num_cells_x)-1) {
                     y_v_interpolation = linear_interpolate(
-                        y_pos,
+                        qy,
                         (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY,
                         mac_y(yi/2,xi/2), mac_y(yi/2 + 1, xi/2)
                     );
                 } else {
                     y_v_interpolation = bilinear_interpolate(
-                        x_pos, y_pos,
+                        qx, qy,
                         (xi/2)*GRID_DX, (xi/2 +1)*GRID_DX,
                         (yi/2)*GRID_DY, (yi/2 +1)*GRID_DY,
                         mac_y(yi/2, xi/2), mac_y(yi/2, xi/2+1),
@@ -256,4 +206,51 @@ void pressure_project_step(
         }
     }
     
+}
+
+
+/* Helpers */
+void bilinear_weights(
+    Eigen::Ref<Eigen::Vector4d> weights,
+    double x, double y,
+    double x1, double x2, double y1, double y2) 
+{
+    double wx1 = (x2 - x) / (x2 - x1);
+    double wx2 = (x - x1) / (x2 - x1);
+    double wy1 = (y2 - y) / (y2 - y1);
+    double wy2 = (y - y1) / (y2 - y1);
+
+    weights(0) = wx1 * wy1;
+    weights(1) = wx1 * wy2;
+    weights(2) = wx2 * wy1;
+    weights(3) = wx2 * wy2;
+}
+double bilinear_interpolate(
+    double x, double y,
+    double x1, double x2, double y1, double y2,
+    double q11, double q12, double q21, double q22) 
+{    
+    Eigen::Vector4d w;
+    bilinear_weights(w, x, y, x1, x2, y1, y2);
+
+    return w(0)*q11 + w(1)*q12 + w(2)*q21 + w(3)*q22; 
+}
+
+void linear_weights(
+    Eigen::Ref<Eigen::Vector2d> weights,
+    double x,
+    double x1, double x2) 
+{    
+    weights(0) = (x2 - x) / (x2 - x1);
+    weights(1) = (x - x1) / (x2 - x1);
+}
+
+double linear_interpolate(
+    double x,
+    double x1, double x2,
+    double q1, double q2) 
+{
+    Eigen::Vector2d w;
+    linear_weights(w, x, x1, x2);
+    return q1*w(0) + q2*w(1);
 }
