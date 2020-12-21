@@ -8,6 +8,8 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <stdio.h>
+#include <iostream>
 
 int main(int argc, char **argv) {
 
@@ -20,6 +22,10 @@ int main(int argc, char **argv) {
     Eigen::VectorXf qdot = Eigen::VectorXf::Zero(2*NUM_PARTICLES);
 
     init_fluid_sim(q, qdot);
+
+    run_one_iteration(q, qdot);
+    std::cout << q << "\n";
+    std::cout << qdot << "\n";
 
     igl::opengl::glfw::Viewer viewer;
     viewer.core().is_animating = true;
